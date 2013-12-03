@@ -39,72 +39,99 @@ class indexVisitor(ast.NodeVisitor):
 
         self.generic_visit(node)
 
+class argumentVisitor(ast.NodeVisitor):
+    def __init__(self, args_info):
+        self.args_info = args_info
+        self.args = list()
+
+    def visit_arguments(self, node):
+        for arg in node.args:
+            a_info = (arg.id,
+                      self.args_info[arg.id][0], 
+                      [dim for dim in self.args_info[arg.id][1]])
+            self.args.append(a_info)
+
+class forHeaderVisitor(ast.NodeVisitor):
+    def __init__(self):
+        self.name = ''
+        self.indvar = ''
+        self.start = ''
+        self.end = ''
+
+    def visit_For(self, node):
+        self.name = str(id(node));
+        self.indvar = str(node.target.id)
+        self.visit(node.iter)
+
+    def visit_Call(self, node):
+        if node.func.id == 'range':
+            self.start = str(self.visit(node.args[0]))
+            self.end = str(self.visit(node.args[1]))
+
+    def visit_Name(self, node):
+        return node.id
+
+    def visit_Num(self, node):
+        return node.n
+
 class xmlGenerator(ast.NodeVisitor):
 
     def __init__(self, args_info):
         """
         args_info = {args_name : (args_type, [args_dim])}
         """
-        self.args_info = args_info;
+        self.args_info = args_info
         self.xmlstr = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
-        self.binaryOp = { ast.Add : 'ADD', ast.Mult : 'MUL' }
+        self.binary_op = { ast.Add : 'ADD', ast.Mult : 'MUL' }
         self.in_subscript = False
 
-    def write(self, name):
+    def write(self, name='temp.xml'):
         f = open(name, 'w')
         f.write(self.xmlstr)
         f.close()
 
+    def clear(self):
+        self.xmlstr = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n'
+
     def visit_FunctionDef(self, node):
         self.xmlstr += '<program>\n'
         self.xmlstr += '<Name>' + node.name + '</Name>\n'
-        self.generic_visit(node);
-        self.xmlstr += '</program>\n'
+        argument_visitor = argumentVisitor(self.args_info)
+        argument_visitor.visit(node.args)
 
-    def visit_arguments(self, node):
-        for args in node.args:
+        for arg in argument_visitor.args:
             self.xmlstr += '<Var>\n'
-            self.xmlstr += '<Name>' + str(args.id) + '</Name>\n'
-            self.xmlstr += '<Type>' + str(self.args_info[args.id][0]) + '</Type>'
-            for dim in self.args_info[args.id][1]:
+            self.xmlstr += '<Name>' + str(arg[0]) + '</Name>\n'
+            self.xmlstr += '<Type>' + str(arg[1]) + '</Type>'
+            for dim in arg[2]:
                 self.xmlstr += '<Dim>' + str(dim) + '</Dim>'
             self.xmlstr += '</Var>\n'
 
-    def visit_Name(self, node):
-        self.xmlstr += str(node.id)
+        self.generic_visit(node);
+        self.xmlstr += '</program>\n'
 
     def visit_Num(self, node):
-        self.xmlstr += '<Constant>\n'
-        self.xmlstr += '<Name>' + str(id(node)) + '</Name>\n'
-        self.xmlstr += '<Value>' + str(node.n) + '</Value>\n'
-        self.xmlstr += '</Constant>\n'
+        if isinstance(node.n, (int, long)):
+            self.xmlstr += '<IntConstant>\n'
+            self.xmlstr += '<Name>' + str(id(node)) + '</Name>\n'
+            self.xmlstr += '<Value>' + str(node.n) + '</Value>\n'
+            self.xmlstr += '</IntConstant>\n'
+        else:
+            self.xmlstr += '<Constant>\n'
+            self.xmlstr += '<Name>' + str(id(node)) + '</Name>\n'
+            self.xmlstr += '<Value>' + str(node.n) + '</Value>\n'
+            self.xmlstr += '</Constant>\n'
 
     def visit_For(self, node):
         self.xmlstr += '<ForStmt>\n'
+
+        headerVisitor = forHeaderVisitor()
+        headerVisitor.visit(node)
         self.xmlstr += '<LoopHeader>\n'
-        
-        self.xmlstr += '<Name>' + str(id(node)) + '</Name>\n'
-
-        self.xmlstr += '<Induction>'
-        self.visit(node.target)
-        self.xmlstr += '</Induction>\n'
-
-        self.xmlstr += '<Start>'
-        start = node.iter.args[0];
-        if type(start) == ast.Num:
-            self.xmlstr += str(start.n)
-        elif type(start) == ast.Name:
-            self.xmlstr += str(start.id)
-        self.xmlstr += '</Start>\n'
-        
-        self.xmlstr += '<Stop>'
-        stop = node.iter.args[1];
-        if type(stop) == ast.Num:
-            self.xmlstr += str(stop.n)
-        elif type(stop) == ast.Name:
-            self.xmlstr += str(stop.id)
-        self.xmlstr += '</Stop>\n'
-        
+        self.xmlstr += '<Name>' + headerVisitor.name + '</Name>\n'
+        self.xmlstr += '<Induction>' + headerVisitor.indvar + '</Induction>\n'
+        self.xmlstr += '<Start>' + headerVisitor.start + '</Start>\n'
+        self.xmlstr += '<Stop>' + headerVisitor.end + '</Stop>\n'
         self.xmlstr += '</LoopHeader>\n'
 
         self.xmlstr += '<LoopBody>\n'
@@ -165,7 +192,7 @@ class xmlGenerator(ast.NodeVisitor):
         
         self.xmlstr += '<CompoundExpr>'
         self.xmlstr += '<Name>' + str(id(node)) + '</Name>\n'
-        self.xmlstr += '<Op>' + self.binaryOp[type(node.op)] + '</Op>\n'
+        self.xmlstr += '<Op>' + self.binary_op[type(node.op)] + '</Op>\n'
         self.xmlstr += '<Left>' + str(id(node.left)) + '</Left>\n'
         self.xmlstr += '<Right>' + str(id(node.right)) + '</Right>\n'
         self.xmlstr += '</CompoundExpr>\n'
