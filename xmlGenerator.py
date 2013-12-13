@@ -205,3 +205,64 @@ class xmlGenerator(ast.NodeVisitor):
         self.xmlstr += '<Left>' + str(id(node.targets[0])) + '</Left>\n'
         self.xmlstr += '<Right>' + str(id(node.value)) + '</Right>\n'
         self.xmlstr += '</AssignExpr>\n'
+
+
+
+class astCheck(ast.NodeVisitor):
+
+                        
+    supported_syntax = [ast.Module,
+                        ast.FunctionDef, 
+                        ast.Assign, 
+                        ast.For,
+                        ast.Global,
+                        ast.Expr,
+                        ast.BinOp,
+                        ast.Num,
+                        ast.Subscript,
+                        ast.Name,
+                        ast.Add, ast.Sub, ast.Mult, ast.Div,
+                        ast.Load, ast.Store, ast.Param,
+                        ast.arguments,
+                        ast.Index,
+                        ast.Call]
+    
+    def generic_visit(self, node):
+        if not self.is_valid_tfj(node):
+            print(node)
+    
+        for field, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                for item in value:
+                    if self.is_node(item):
+                        self.visit(item)
+            elif self.is_node(value):
+                self.visit(value)
+
+    def is_node(self, node):
+        return isinstance(node, ast.AST)
+
+    def is_valid_tfj(self, x):
+        return any(isinstance(x, syntax) for syntax in self.__class__.supported_syntax) 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
